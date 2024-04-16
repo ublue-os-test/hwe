@@ -8,6 +8,7 @@ on:
         type: string
 env:
   IMAGE_REGISTRY: ghcr.io/${{ github.repository_owner }}
+  SOURCE_ORG: ${{ github.repository_owner }}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}-${{ inputs.fedora_version }}
@@ -33,13 +34,13 @@ jobs:
         image_name:
           - silverblue
           - kinoite
-          - sericea
-          - onyx
-          - base
-          - lxqt
-          - lazurite
-          - mate
-          - vauxite
+          # - sericea
+          # - onyx
+          # - base
+          # - lxqt
+          # - lazurite
+          # - mate
+          # - vauxite
         nvidia_version:
           - 0   # No Nvidia drivers (this indicates to only build "main" image target
           - 550 # Latest Nvidia driver (update IS_LATEST_DRIVER below if version changes)
@@ -70,10 +71,10 @@ jobs:
       - name: Checkout Push to Registry action
         uses: actions/checkout@v4
 
-      - name: Verify base image
-        uses: EyeCantCU/cosign-action/verify@v0.2.2
-        with:
-          containers: ${{ matrix.image_name }}-main:${{ matrix.fedora_version }}
+      # - name: Verify base image
+      #   uses: EyeCantCU/cosign-action/verify@v0.2.2
+      #   with:
+      #     containers: ${{ matrix.image_name }}-main:${{ matrix.fedora_version }}
 
       - name: Matrix Variables
         shell: bash
@@ -189,7 +190,7 @@ jobs:
           attempt_delay: 15000
           command: |
             set -eo pipefail
-            ver=$(skopeo inspect docker://ghcr.io/ublue-os/${{ env.SOURCE_IMAGE }}:${{ matrix.fedora_version }} | jq -r '.Labels["org.opencontainers.image.version"]')
+            ver=$(skopeo inspect docker://ghcr.io/${{ env.SOURCE_ORG }}/${{ env.SOURCE_IMAGE }}:${{ matrix.fedora_version }} | jq -r '.Labels["org.opencontainers.image.version"]')
             if [ -z "$ver" ] || [ "null" = "$ver" ]; then
               echo "inspected image version must not be empty or null"
               exit 1
@@ -205,7 +206,7 @@ jobs:
             ${{ env.IMAGE_NAME }}
           labels: |
             org.opencontainers.image.title=${{ env.IMAGE_NAME }}
-            org.opencontainers.image.description=ublue-os ${{ matrix.image_name }}${{ matrix.hwe_flavor == 'asus' && ' for ASUS devices' || '' }}${{ matrix.hwe_flavor == 'surface' && ' for Surface laptops' || ''}}${{ matrix.nvidia_version != '0' && ' with Nvidia drivers' || ''}}
+            org.opencontainers.image.description=${{ env.SOURCE_ORG }} ${{ matrix.image_name }}${{ matrix.hwe_flavor == 'asus' && ' for ASUS devices' || '' }}${{ matrix.hwe_flavor == 'surface' && ' for Surface laptops' || ''}}${{ matrix.nvidia_version != '0' && ' with Nvidia drivers' || ''}}
             org.opencontainers.image.version=${{ env.SOURCE_IMAGE_VERSION }}
             io.artifacthub.package.readme-url=https://raw.githubusercontent.com/${{ github.repository }}/main/README.md
             io.artifacthub.package.logo-url=https://avatars.githubusercontent.com/u/1728152?s=200&v=4
@@ -218,7 +219,7 @@ jobs:
           command: |
             # pull the base image used for FROM in containerfile so
             # we can retry on that unfortunately common failure case
-            podman pull ghcr.io/ublue-os/${{ matrix.image_name }}-main:${{ matrix.fedora_version }}
+            podman pull ghcr.io/${{ env.SOURCE_ORG }}/${{ matrix.image_name }}-main:${{ matrix.fedora_version }}
 
       # Build image using Buildah action
       - name: Build Image
@@ -233,6 +234,7 @@ jobs:
           build-args: |
             IMAGE_NAME=${{ matrix.image_name }}
             SOURCE_IMAGE=${{ env.SOURCE_IMAGE }}
+            SOURCE_ORG=${{ env.SOURCE_ORG }}
             FEDORA_MAJOR_VERSION=${{ matrix.fedora_version }}
             NVIDIA_MAJOR_VERSION=${{ matrix.nvidia_version }}
             HWE_FLAVOR=${{ matrix.hwe_flavor }}
@@ -271,31 +273,31 @@ jobs:
             extra-args: |
               --disable-content-trust
 
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        if: github.event_name != 'pull_request'
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+      # - name: Login to GitHub Container Registry
+      #   uses: docker/login-action@v3
+      #   if: github.event_name != 'pull_request'
+      #   with:
+      #     registry: ghcr.io
+      #     username: ${{ github.actor }}
+      #     password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Sign container
-      - uses: sigstore/cosign-installer@v3.4.0
-        if: github.event_name != 'pull_request'
+      # # Sign container
+      # - uses: sigstore/cosign-installer@v3.4.0
+      #   if: github.event_name != 'pull_request'
 
-      - name: Sign container image
-        if: github.event_name != 'pull_request'
-        run: |
-          cosign sign -y --key env://COSIGN_PRIVATE_KEY ${{ steps.registry_case.outputs.lowercase }}/${{ env.IMAGE_NAME }}@${TAGS}
-        env:
-          TAGS: ${{ steps.push.outputs.outputs && fromJSON(steps.push.outputs.outputs).digest }}
-          COSIGN_EXPERIMENTAL: false
-          COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
+      # - name: Sign container image
+      #   if: github.event_name != 'pull_request'
+      #   run: |
+      #     cosign sign -y --key env://COSIGN_PRIVATE_KEY ${{ steps.registry_case.outputs.lowercase }}/${{ env.IMAGE_NAME }}@${TAGS}
+      #   env:
+      #     TAGS: ${{ steps.push.outputs.outputs && fromJSON(steps.push.outputs.outputs).digest }}
+      #     COSIGN_EXPERIMENTAL: false
+      #     COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
 
-      - name: Echo outputs
-        if: github.event_name != 'pull_request'
-        run: |
-          echo "${{ toJSON(steps.push.outputs) }}"
+      # - name: Echo outputs
+      #   if: github.event_name != 'pull_request'
+      #   run: |
+      #     echo "${{ toJSON(steps.push.outputs) }}"
 
   check:
     name: Check all ${{ inputs.fedora_version }} builds successful
