@@ -4,12 +4,6 @@ set -ouex pipefail
 
 RELEASE="$(rpm -E %fedora)"
 
-if [[ "${FEDORA_MAJOR_VERSION}" -le 38 ]]; then
-    sed -i 's@enabled=1@enabled=0@g' /etc/yum.repos.d/fedora-{cisco-openh264,modular,updates-modular}.repo
-else
-    sed -i 's@enabled=1@enabled=0@g' /etc/yum.repos.d/fedora-cisco-openh264.repo
-fi
-
 # after F40 launches, bump to 41
 if [[ "${FEDORA_MAJOR_VERSION}" -ge 40 ]]; then
     # note: this is done before single mirror hack to ensure this persists in image and is not reset
